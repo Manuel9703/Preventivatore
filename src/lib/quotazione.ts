@@ -7,10 +7,44 @@
 
 import { fattoriFinitura, type LivelloFinitura, type Materiale } from '../data/materiali'
 
+/** Grezzo a forma di parallelepipedo (lastra/blocco), misure in mm */
+export interface DimensioniParallelepipedo {
+  forma: 'parallelepipedo'
+  lunghezzaMm: number
+  larghezzaMm: number
+  altezzaMm: number
+}
+
+/** Grezzo a forma di cilindro (barra tonda), misure in mm */
+export interface DimensioniCilindro {
+  forma: 'cilindro'
+  diametroMm: number
+  lunghezzaMm: number
+}
+
+export type DimensioniGrezzo = DimensioniParallelepipedo | DimensioniCilindro
+
+/** Volume del grezzo calcolato dalle sue dimensioni, in cm³ */
+export function calcolaVolumeGrezzoCm3(dimensioni: DimensioniGrezzo): number {
+  // Le dimensioni sono in mm, quindi il volume in mm³ va diviso per 1000
+  // per ottenere i cm³ (1 cm³ = 1000 mm³).
+  if (dimensioni.forma === 'parallelepipedo') {
+    const { lunghezzaMm, larghezzaMm, altezzaMm } = dimensioni
+    return (lunghezzaMm * larghezzaMm * altezzaMm) / 1000
+  }
+  const raggioMm = dimensioni.diametroMm / 2
+  return (Math.PI * raggioMm ** 2 * dimensioni.lunghezzaMm) / 1000
+}
+
+/** Massa del grezzo calcolata dalle sue dimensioni e dalla densità del materiale, in grammi */
+export function calcolaMassaGrezzoG(dimensioni: DimensioniGrezzo, densita: number): number {
+  return calcolaVolumeGrezzoCm3(dimensioni) * densita
+}
+
 export interface InputQuotazione {
   materiale: Materiale
-  /** Massa del grezzo di partenza, in grammi */
-  massaGrezzoG: number
+  /** Dimensioni del grezzo di partenza, da cui si ricava la massa */
+  dimensioniGrezzo: DimensioniGrezzo
   /** Massa del pezzo finito, in grammi */
   massaFinitoG: number
   /**
@@ -48,8 +82,9 @@ export interface RisultatoQuotazione {
  * - Tempo totale = Tempo sgrossatura + Tempo finitura
  */
 export function calcolaQuotazione(input: InputQuotazione): RisultatoQuotazione {
-  const { materiale, massaGrezzoG, massaFinitoG, livelloFinitura } = input
+  const { materiale, dimensioniGrezzo, massaFinitoG, livelloFinitura } = input
 
+  const massaGrezzoG = calcolaMassaGrezzoG(dimensioniGrezzo, materiale.densita)
   const massaAsportataG = massaGrezzoG - massaFinitoG
   const volumeAsportatoCm3 = massaAsportataG / materiale.densita
 
@@ -73,20 +108,28 @@ export function calcolaQuotazione(input: InputQuotazione): RisultatoQuotazione {
  * Ritorna un messaggio di errore, oppure null se i dati sono validi.
  */
 export function validaInput(input: {
-  massaGrezzoG: number
+  materiale: Materiale
+  dimensioniGrezzo: DimensioniGrezzo
   massaFinitoG: number
   vcMetriPerMinuto: number
 }): string | null {
-  const { massaGrezzoG, massaFinitoG, vcMetriPerMinuto } = input
+  const { materiale, dimensioniGrezzo, massaFinitoG, vcMetriPerMinuto } = input
 
-  if (!Number.isFinite(massaGrezzoG) || massaGrezzoG <= 0) {
-    return 'Inserisci una massa del grezzo valida (maggiore di zero).'
+  const misure =
+    dimensioniGrezzo.forma === 'parallelepipedo'
+      ? [dimensioniGrezzo.lunghezzaMm, dimensioniGrezzo.larghezzaMm, dimensioniGrezzo.altezzaMm]
+      : [dimensioniGrezzo.diametroMm, dimensioniGrezzo.lunghezzaMm]
+
+  if (misure.some((m) => !Number.isFinite(m) || m <= 0)) {
+    return 'Inserisci le misure del grezzo (tutte maggiori di zero).'
   }
   if (!Number.isFinite(massaFinitoG) || massaFinitoG <= 0) {
     return 'Inserisci una massa del pezzo finito valida (maggiore di zero).'
   }
+
+  const massaGrezzoG = calcolaMassaGrezzoG(dimensioniGrezzo, materiale.densita)
   if (massaFinitoG >= massaGrezzoG) {
-    return 'La massa del pezzo finito deve essere inferiore alla massa del grezzo.'
+    return 'La massa del pezzo finito deve essere inferiore alla massa del grezzo calcolata dalle misure.'
   }
   if (!Number.isFinite(vcMetriPerMinuto) || vcMetriPerMinuto <= 0) {
     return 'Inserisci una velocità di taglio (Vc) valida (maggiore di zero).'
