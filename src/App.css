@@ -60,6 +60,15 @@ header h1 {
   color: var(--text);
 }
 
+.massa-calcolata {
+  margin: -8px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--accent-bg);
+  font-weight: 600;
+  color: var(--text-h);
+}
+
 .btn-calcola {
   font: inherit;
   font-size: 16px;
