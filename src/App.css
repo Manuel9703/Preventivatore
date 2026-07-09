@@ -55,6 +55,14 @@ header h1 {
   outline-offset: 1px;
 }
 
+.campo input[type='range'] {
+  padding: 0;
+  border: none;
+  background: transparent;
+  accent-color: var(--accent);
+  height: 32px;
+}
+
 .hint {
   font-size: 12px;
   color: var(--text);
