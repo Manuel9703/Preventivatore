@@ -41,6 +41,27 @@ export function calcolaMassaGrezzoG(dimensioni: DimensioniGrezzo, densita: numbe
   return calcolaVolumeGrezzoCm3(dimensioni) * densita
 }
 
+/**
+ * Condizioni di taglio impostate dall'utente per la lavorazione, su una
+ * scala da 1 (condizioni difficili: attrezzaggio poco rigido, niente
+ * refrigerante, macchina datata, ecc.) a 10 (condizioni ottimali).
+ *
+ * Il valore agisce come fattore moltiplicativo (valore/10) sia sull'MRR di
+ * sgrossatura sia sulla Vc consigliata: condizioni peggiori riducono la
+ * velocità di asportazione effettiva e allungano i tempi stimati.
+ */
+export type CondizioniTaglio = number
+
+/** Fattore moltiplicativo (0.1 - 1.0) derivato dalle condizioni di taglio */
+export function fattoreCondizioniTaglio(condizioniTaglio: CondizioniTaglio): number {
+  return condizioniTaglio / 10
+}
+
+/** Vc suggerita per il materiale, corretta in base alle condizioni di taglio */
+export function calcolaVcSuggerita(materiale: Materiale, condizioniTaglio: CondizioniTaglio): number {
+  return materiale.vcConsigliata * fattoreCondizioniTaglio(condizioniTaglio)
+}
+
 export interface InputQuotazione {
   materiale: Materiale
   /** Dimensioni del grezzo di partenza, da cui si ricava la massa */
@@ -57,6 +78,8 @@ export interface InputQuotazione {
    * successiva con un modello di calcolo più realistico.
    */
   vcMetriPerMinuto: number
+  /** Condizioni di taglio, da 1 (difficili) a 10 (ottimali) */
+  condizioniTaglio: CondizioniTaglio
   /** Livello di finitura richiesto */
   livelloFinitura: LivelloFinitura
 }
@@ -77,18 +100,20 @@ export interface RisultatoQuotazione {
  *
  * Formule:
  * - Volume asportato = (massa_grezzo - massa_finito) / densità_materiale
- * - Tempo sgrossatura = Volume asportato / MRR sgrossatura (per materiale)
+ * - MRR effettivo = MRR sgrossatura (per materiale) * (condizioni_taglio / 10)
+ * - Tempo sgrossatura = Volume asportato / MRR effettivo
  * - Tempo finitura = Tempo sgrossatura * fattore_livello_finitura
  * - Tempo totale = Tempo sgrossatura + Tempo finitura
  */
 export function calcolaQuotazione(input: InputQuotazione): RisultatoQuotazione {
-  const { materiale, dimensioniGrezzo, massaFinitoG, livelloFinitura } = input
+  const { materiale, dimensioniGrezzo, massaFinitoG, livelloFinitura, condizioniTaglio } = input
 
   const massaGrezzoG = calcolaMassaGrezzoG(dimensioniGrezzo, materiale.densita)
   const massaAsportataG = massaGrezzoG - massaFinitoG
   const volumeAsportatoCm3 = massaAsportataG / materiale.densita
 
-  const tempoSgrossaturaMin = volumeAsportatoCm3 / materiale.mrrSgrossatura
+  const mrrEffettivo = materiale.mrrSgrossatura * fattoreCondizioniTaglio(condizioniTaglio)
+  const tempoSgrossaturaMin = volumeAsportatoCm3 / mrrEffettivo
 
   const fattoreFinitura = fattoriFinitura[livelloFinitura]
   const tempoFinituraMin = tempoSgrossaturaMin * fattoreFinitura
@@ -112,8 +137,9 @@ export function validaInput(input: {
   dimensioniGrezzo: DimensioniGrezzo
   massaFinitoG: number
   vcMetriPerMinuto: number
+  condizioniTaglio: CondizioniTaglio
 }): string | null {
-  const { materiale, dimensioniGrezzo, massaFinitoG, vcMetriPerMinuto } = input
+  const { materiale, dimensioniGrezzo, massaFinitoG, vcMetriPerMinuto, condizioniTaglio } = input
 
   const misure =
     dimensioniGrezzo.forma === 'parallelepipedo'
@@ -133,6 +159,9 @@ export function validaInput(input: {
   }
   if (!Number.isFinite(vcMetriPerMinuto) || vcMetriPerMinuto <= 0) {
     return 'Inserisci una velocità di taglio (Vc) valida (maggiore di zero).'
+  }
+  if (!Number.isInteger(condizioniTaglio) || condizioniTaglio < 1 || condizioniTaglio > 10) {
+    return 'Le condizioni di taglio devono essere un valore intero tra 1 e 10.'
   }
   return null
 }

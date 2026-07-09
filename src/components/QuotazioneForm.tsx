@@ -1,12 +1,25 @@
 import { useState, type FormEvent } from 'react'
-import { materiali, type LivelloFinitura } from '../data/materiali'
-import { calcolaMassaGrezzoG, type DimensioniGrezzo, type InputQuotazione } from '../lib/quotazione'
+import { gruppoIsoLabel, materiali, type GruppoIso, type LivelloFinitura } from '../data/materiali'
+import {
+  calcolaMassaGrezzoG,
+  calcolaVcSuggerita,
+  type CondizioniTaglio,
+  type DimensioniGrezzo,
+  type InputQuotazione,
+} from '../lib/quotazione'
 
 interface QuotazioneFormProps {
   onSubmit: (input: InputQuotazione) => void
 }
 
 type FormaGrezzo = DimensioniGrezzo['forma']
+
+// Materiali raggruppati per gruppo ISO 513, nell'ordine P/M/K/N/S/H, per la select.
+const gruppiIso = Object.keys(gruppoIsoLabel) as GruppoIso[]
+const materialiPerGruppo = gruppiIso.map((gruppo) => ({
+  gruppo,
+  materiali: materiali.filter((m) => m.gruppoIso === gruppo),
+}))
 
 export function QuotazioneForm({ onSubmit }: QuotazioneFormProps) {
   const [materialeId, setMaterialeId] = useState(materiali[0].id)
@@ -19,14 +32,22 @@ export function QuotazioneForm({ onSubmit }: QuotazioneFormProps) {
   const [diametro, setDiametro] = useState('')
 
   const [massaFinito, setMassaFinito] = useState('')
-  const [vc, setVc] = useState(String(materiale.vcConsigliata))
+  const [condizioniTaglio, setCondizioniTaglio] = useState<CondizioniTaglio>(10)
+  const [vc, setVc] = useState(String(calcolaVcSuggerita(materiale, 10)))
   const [livelloFinitura, setLivelloFinitura] = useState<LivelloFinitura>('medio')
 
   function handleMaterialeChange(id: string) {
     setMaterialeId(id)
     const nuovoMateriale = materiali.find((m) => m.id === id) ?? materiali[0]
-    // Precompila Vc con il default suggerito per il nuovo materiale.
-    setVc(String(nuovoMateriale.vcConsigliata))
+    // Precompila Vc con il default suggerito per il nuovo materiale, corretto
+    // in base alle condizioni di taglio correnti.
+    setVc(String(calcolaVcSuggerita(nuovoMateriale, condizioniTaglio)))
+  }
+
+  function handleCondizioniTaglioChange(valore: CondizioniTaglio) {
+    setCondizioniTaglio(valore)
+    // Riallinea anche la Vc suggerita alle nuove condizioni di taglio.
+    setVc(String(calcolaVcSuggerita(materiale, valore)))
   }
 
   const dimensioniGrezzo: DimensioniGrezzo =
@@ -55,6 +76,7 @@ export function QuotazioneForm({ onSubmit }: QuotazioneFormProps) {
       dimensioniGrezzo,
       massaFinitoG: Number(massaFinito),
       vcMetriPerMinuto: Number(vc),
+      condizioniTaglio,
       livelloFinitura,
     })
   }
@@ -68,11 +90,18 @@ export function QuotazioneForm({ onSubmit }: QuotazioneFormProps) {
           value={materialeId}
           onChange={(e) => handleMaterialeChange(e.target.value)}
         >
-          {materiali.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.nome}
-            </option>
-          ))}
+          {materialiPerGruppo.map(
+            ({ gruppo, materiali: materialiGruppo }) =>
+              materialiGruppo.length > 0 && (
+                <optgroup key={gruppo} label={gruppoIsoLabel[gruppo]}>
+                  {materialiGruppo.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nome}
+                    </option>
+                  ))}
+                </optgroup>
+              ),
+          )}
         </select>
       </div>
 
@@ -186,6 +215,24 @@ export function QuotazioneForm({ onSubmit }: QuotazioneFormProps) {
       </div>
 
       <div className="campo">
+        <label htmlFor="condizioni-taglio">
+          Condizioni di taglio: {condizioniTaglio}/10
+        </label>
+        <input
+          id="condizioni-taglio"
+          type="range"
+          min="1"
+          max="10"
+          step="1"
+          value={condizioniTaglio}
+          onChange={(e) => handleCondizioniTaglioChange(Number(e.target.value) as CondizioniTaglio)}
+        />
+        <span className="hint">
+          1 = condizioni difficili (attrezzaggio poco rigido, niente refrigerante...), 10 = condizioni ottimali. Riduce MRR e Vc suggerita in proporzione.
+        </span>
+      </div>
+
+      <div className="campo">
         <label htmlFor="vc">Vc - velocità di taglio (m/min)</label>
         <input
           id="vc"
@@ -198,7 +245,7 @@ export function QuotazioneForm({ onSubmit }: QuotazioneFormProps) {
           required
         />
         <span className="hint">
-          Valore precompilato in base al materiale, modificabile liberamente.
+          Valore precompilato in base a materiale e condizioni di taglio, modificabile liberamente.
         </span>
       </div>
 
