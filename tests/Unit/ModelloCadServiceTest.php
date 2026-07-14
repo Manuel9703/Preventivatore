@@ -41,6 +41,26 @@ class ModelloCadServiceTest extends TestCase
         $this->assertEqualsWithDelta(7.85, $massa, 0.01);
     }
 
+    public function test_lancia_un_errore_chiarito_quando_il_parser_node_va_in_timeout()
+    {
+        $scriptPath = tempnam(sys_get_temp_dir(), 'cad-script');
+        $scriptPath = $scriptPath . '.mjs';
+        file_put_contents($scriptPath, "await new Promise((resolve) => setTimeout(resolve, 2000));\nconsole.log(JSON.stringify({ success: true }));\n");
+        putenv("CAD_ANALYSIS_SCRIPT_PATH={$scriptPath}");
+        putenv('CAD_ANALYSIS_TIMEOUT_SECONDS=1');
+
+        $percorsoFile = tempnam(sys_get_temp_dir(), 'modello-cad') . '.stp';
+        file_put_contents($percorsoFile, 'contenuto non valido');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Timeout durante l\'analisi del file');
+
+        $this->service->analizza($percorsoFile, 'step');
+
+        @unlink($scriptPath);
+        @unlink($percorsoFile);
+    }
+
     public function test_lancia_eccezione_per_un_file_inesistente()
     {
         $this->expectException(\RuntimeException::class);

@@ -1,5 +1,5 @@
 import { type FormDataConvertible } from '@inertiajs/core';
-import { type FormEvent } from 'react';
+import { useEffect, useRef, type FormEvent, type RefObject } from 'react';
 
 export interface Materiale {
     id: string;
@@ -44,6 +44,7 @@ interface QuotazioneFormProps {
     massaGrezzoG: number | null;
     analisiCad: StatoAnalisiCad;
     onModelloChange: (file: File | null) => void;
+    onManualMassEntry?: () => void;
     onSubmit: (e: FormEvent) => void;
 }
 
@@ -57,9 +58,11 @@ export function QuotazioneForm({
     massaGrezzoG,
     analisiCad,
     onModelloChange,
+    onManualMassEntry,
     onSubmit,
 }: QuotazioneFormProps) {
     const materiale = materiali.find((m) => m.id === data.materiale_id) ?? materiali[0];
+    const massaFinitoInputRef = useRef<HTMLInputElement>(null);
 
     const gruppiOrdinati = Object.keys(gruppi).filter((gruppo) => materiali.some((m) => m.gruppo_iso === gruppo));
 
@@ -75,6 +78,13 @@ export function QuotazioneForm({
         setData('condizioni_taglio', valore);
         setData('vc_metri_per_minuto', String(materiale.vc_consigliata * (valore / 10)));
     }
+
+    useEffect(() => {
+        if (analisiCad.stato === 'errore') {
+            massaFinitoInputRef.current?.focus();
+            massaFinitoInputRef.current?.select();
+        }
+    }, [analisiCad.stato]);
 
     return (
         <form className="quotazione-form flex flex-col gap-4" onSubmit={onSubmit}>
@@ -193,17 +203,32 @@ export function QuotazioneForm({
                         {analisiCad.boundingBoxMm.map((v) => v.toFixed(1)).join(' × ')} mm)
                     </span>
                 )}
-                {analisiCad.stato === 'errore' && <span className="text-xs text-red-600">{analisiCad.errore}</span>}
+                {analisiCad.stato === 'errore' && (
+                    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30">
+                        <p>{analisiCad.errore}</p>
+                        <p className="mt-1 font-medium">Puoi comunque inserire manualmente la massa del pezzo finito qui sotto.</p>
+                        {onManualMassEntry && (
+                            <button
+                                type="button"
+                                onClick={onManualMassEntry}
+                                className="mt-2 font-semibold underline underline-offset-2"
+                            >
+                                Inserisci manualmente la massa
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             <Campo
                 id="massa-finito"
                 label="Massa pezzo finito (g)"
-                placeholder="es. 850"
                 value={data.massa_finito_g}
                 onChange={(v) => setData('massa_finito_g', v)}
                 error={errors.massa_finito_g}
-                hint={analisiCad.stato === 'ok' ? 'Calcolata dal modello 3D caricato, modificabile.' : undefined}
+                inputRef={massaFinitoInputRef}
+                placeholder={analisiCad.stato === 'errore' ? 'Inserisci manualmente la massa (g)' : 'es. 850'}
+                hint={analisiCad.stato === 'ok' ? 'Calcolata dal modello 3D caricato, modificabile.' : analisiCad.stato === 'errore' ? 'Inserimento manuale attivo.' : undefined}
             />
 
             <div className="campo flex flex-col gap-1 text-left">
@@ -270,9 +295,10 @@ interface CampoProps {
     placeholder?: string;
     error?: string;
     hint?: string;
+    inputRef?: RefObject<HTMLInputElement | null>;
 }
 
-function Campo({ id, label, value, onChange, placeholder, error, hint }: CampoProps) {
+function Campo({ id, label, value, onChange, placeholder, error, hint, inputRef }: CampoProps) {
     return (
         <div className="campo flex flex-col gap-1 text-left">
             <label htmlFor={id} className="text-sm font-semibold">
@@ -287,6 +313,7 @@ function Campo({ id, label, value, onChange, placeholder, error, hint }: CampoPr
                 placeholder={placeholder}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
+                ref={inputRef}
                 className="rounded-md border border-neutral-300 px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-900"
                 required
             />

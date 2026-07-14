@@ -135,6 +135,10 @@ export default function QuotazioneIndex({ materiali, gruppi, risultato }: Quotaz
         form.post('/preventivo', { preserveScroll: true });
     }
 
+    function handleManualMassEntry() {
+        form.setData('massa_finito_g', '');
+    }
+
     return (
         <>
             <Head title="Preventivatore CNC" />
@@ -154,6 +158,7 @@ export default function QuotazioneIndex({ materiali, gruppi, risultato }: Quotaz
                     massaGrezzoG={massaGrezzoG}
                     analisiCad={analisiCad}
                     onModelloChange={handleModelloChange}
+                    onManualMassEntry={handleManualMassEntry}
                     onSubmit={handleSubmit}
                 />
 

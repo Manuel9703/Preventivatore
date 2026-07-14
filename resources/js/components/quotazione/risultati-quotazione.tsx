@@ -13,12 +13,17 @@ interface RisultatiQuotazioneProps {
 function formattaMinuti(minuti: number): string {
     if (!Number.isFinite(minuti) || minuti < 0) return '—';
 
-    const minutiInteri = Math.round(minuti);
-    const ore = Math.floor(minutiInteri / 60);
-    const minutiResto = minutiInteri % 60;
+    const totSecondi = Math.max(0, Math.round(minuti * 60));
+    const ore = Math.floor(totSecondi / 3600);
+    const minutiResto = Math.floor((totSecondi % 3600) / 60);
+    const secondiResto = totSecondi % 60;
 
-    if (ore === 0) return `${minutiInteri} min`;
-    return `${ore} h ${minutiResto} min`;
+    const formattazioneMinuti = String(minutiResto).padStart(2, '0');
+    const formattazioneSecondi = String(secondiResto).padStart(2, '0');
+
+    if (ore > 0) return `${ore} h ${formattazioneMinuti} min ${formattazioneSecondi} s`;
+    if (minutiResto > 0) return `${formattazioneMinuti} min ${formattazioneSecondi} s`;
+    return `${formattazioneSecondi} s`;
 }
 
 export function RisultatiQuotazione({ risultato }: RisultatiQuotazioneProps) {
