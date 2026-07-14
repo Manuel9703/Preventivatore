@@ -26,6 +26,14 @@ export interface QuotazioneFormData {
     [key: string]: FormDataConvertible;
 }
 
+export interface StatoAnalisiCad {
+    stato: 'idle' | 'caricamento' | 'ok' | 'errore';
+    nomeFile?: string;
+    volumeCm3?: number;
+    boundingBoxMm?: [number, number, number];
+    errore?: string;
+}
+
 interface QuotazioneFormProps {
     materiali: Materiale[];
     gruppi: Record<string, string>;
@@ -34,10 +42,23 @@ interface QuotazioneFormProps {
     errors: Partial<Record<keyof QuotazioneFormData, string>>;
     processing: boolean;
     massaGrezzoG: number | null;
+    analisiCad: StatoAnalisiCad;
+    onModelloChange: (file: File | null) => void;
     onSubmit: (e: FormEvent) => void;
 }
 
-export function QuotazioneForm({ materiali, gruppi, data, setData, errors, processing, massaGrezzoG, onSubmit }: QuotazioneFormProps) {
+export function QuotazioneForm({
+    materiali,
+    gruppi,
+    data,
+    setData,
+    errors,
+    processing,
+    massaGrezzoG,
+    analisiCad,
+    onModelloChange,
+    onSubmit,
+}: QuotazioneFormProps) {
     const materiale = materiali.find((m) => m.id === data.materiale_id) ?? materiali[0];
 
     const gruppiOrdinati = Object.keys(gruppi).filter((gruppo) => materiali.some((m) => m.gruppo_iso === gruppo));
@@ -148,6 +169,33 @@ export function QuotazioneForm({ materiali, gruppi, data, setData, errors, proce
                 Massa grezzo calcolata: {massaGrezzoG !== null ? `${massaGrezzoG.toFixed(1)} g` : '—'}
             </p>
 
+            <div className="campo flex flex-col gap-1 text-left">
+                <label htmlFor="modello-cad" className="text-sm font-semibold">
+                    Modello 3D pezzo finito (.step, .iges) — opzionale
+                </label>
+                <input
+                    id="modello-cad"
+                    type="file"
+                    accept=".step,.stp,.iges,.igs"
+                    onChange={(e) => onModelloChange(e.target.files?.[0] ?? null)}
+                    className="rounded-md border border-neutral-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-purple-600 file:px-3 file:py-1.5 file:text-white dark:border-neutral-700 dark:bg-neutral-900"
+                />
+                <span className="text-xs text-neutral-500">
+                    Se carichi il modello del pezzo finito, la massa sotto viene calcolata automaticamente dal volume e dal materiale
+                    selezionato, al posto dell&apos;inserimento manuale.
+                </span>
+                {analisiCad.stato === 'caricamento' && (
+                    <span className="text-xs text-purple-600">Analisi di {analisiCad.nomeFile} in corso…</span>
+                )}
+                {analisiCad.stato === 'ok' && analisiCad.boundingBoxMm && (
+                    <span className="rounded-md bg-purple-50 px-3 py-2 text-xs font-semibold dark:bg-purple-950/40">
+                        Volume rilevato: {analisiCad.volumeCm3?.toFixed(2)} cm³ (ingombro:{' '}
+                        {analisiCad.boundingBoxMm.map((v) => v.toFixed(1)).join(' × ')} mm)
+                    </span>
+                )}
+                {analisiCad.stato === 'errore' && <span className="text-xs text-red-600">{analisiCad.errore}</span>}
+            </div>
+
             <Campo
                 id="massa-finito"
                 label="Massa pezzo finito (g)"
@@ -155,6 +203,7 @@ export function QuotazioneForm({ materiali, gruppi, data, setData, errors, proce
                 value={data.massa_finito_g}
                 onChange={(v) => setData('massa_finito_g', v)}
                 error={errors.massa_finito_g}
+                hint={analisiCad.stato === 'ok' ? 'Calcolata dal modello 3D caricato, modificabile.' : undefined}
             />
 
             <div className="campo flex flex-col gap-1 text-left">

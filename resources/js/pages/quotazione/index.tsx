@@ -1,7 +1,18 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useEffect, useState, type FormEvent } from 'react';
-import { QuotazioneForm, type Materiale, type QuotazioneFormData } from '@/components/quotazione/quotazione-form';
+import { QuotazioneForm, type Materiale, type QuotazioneFormData, type StatoAnalisiCad } from '@/components/quotazione/quotazione-form';
 import { RisultatiQuotazione, type RisultatoQuotazione } from '@/components/quotazione/risultati-quotazione';
+
+/** Legge il valore di un cookie dal browser (usato per il token CSRF). */
+function leggiCookie(nome: string): string | null {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${nome}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+/** Arrotonda un numero calcolato prima di scriverlo in un campo, per evitare artefatti di precisione float (es. 2.8099999999999996). */
+function arrotonda(valore: number, decimali = 2): string {
+    return valore.toFixed(decimali);
+}
 
 interface QuotazioneIndexProps {
     materiali: Materiale[];
@@ -26,6 +37,68 @@ export default function QuotazioneIndex({ materiali, gruppi, risultato }: Quotaz
     });
 
     const [massaGrezzoG, setMassaGrezzoG] = useState<number | null>(null);
+    const [analisiCad, setAnalisiCad] = useState<StatoAnalisiCad>({ stato: 'idle' });
+
+    // Se è già stato analizzato un modello 3D e l'utente cambia materiale,
+    // ricalcola la massa del pezzo finito con la nuova densità, senza dover
+    // ricaricare il file.
+    useEffect(() => {
+        if (analisiCad.stato !== 'ok' || analisiCad.volumeCm3 === undefined) return;
+
+        const materiale = materiali.find((m) => m.id === form.data.materiale_id);
+        if (!materiale) return;
+
+        form.setData('massa_finito_g', arrotonda(analisiCad.volumeCm3 * materiale.densita));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [form.data.materiale_id]);
+
+    async function handleModelloChange(file: File | null) {
+        if (!file) {
+            setAnalisiCad({ stato: 'idle' });
+            return;
+        }
+
+        setAnalisiCad({ stato: 'caricamento', nomeFile: file.name });
+
+        const formData = new FormData();
+        formData.append('materiale_id', form.data.materiale_id);
+        formData.append('modello', file);
+
+        try {
+            const xsrfToken = leggiCookie('XSRF-TOKEN');
+            const response = await fetch('/preventivo/analizza-modello', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {}),
+                },
+                body: formData,
+            });
+            const json = await response.json();
+
+            if (!response.ok || !json.success) {
+                // I 422 di validazione di Laravel (es. estensione non ammessa) hanno una
+                // forma diversa da quella restituita dal controller ({errors: {campo: [...]}}).
+                const erroreValidazione = json.errors ? Object.values(json.errors).flat()[0] : undefined;
+                setAnalisiCad({
+                    stato: 'errore',
+                    nomeFile: file.name,
+                    errore: json.errore ?? (erroreValidazione as string | undefined) ?? "Errore durante l'analisi del file.",
+                });
+                return;
+            }
+
+            setAnalisiCad({
+                stato: 'ok',
+                nomeFile: file.name,
+                volumeCm3: json.volume_cm3,
+                boundingBoxMm: json.bounding_box_mm,
+            });
+            form.setData('massa_finito_g', arrotonda(json.massa_finito_g));
+        } catch {
+            setAnalisiCad({ stato: 'errore', nomeFile: file.name, errore: 'Errore di rete durante il caricamento del file.' });
+        }
+    }
 
     // Anteprima "live" della massa del grezzo: chiede al server il valore
     // calcolato ogni volta che cambiano materiale/forma/misure, con un
@@ -79,6 +152,8 @@ export default function QuotazioneIndex({ materiali, gruppi, risultato }: Quotaz
                     errors={form.errors}
                     processing={form.processing}
                     massaGrezzoG={massaGrezzoG}
+                    analisiCad={analisiCad}
+                    onModelloChange={handleModelloChange}
                     onSubmit={handleSubmit}
                 />
 

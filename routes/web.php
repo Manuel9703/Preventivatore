@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ModelloCadController;
 use App\Http\Controllers\QuotazioneController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -13,6 +14,7 @@ Route::get('/', function () {
 Route::get('/preventivo', [QuotazioneController::class, 'index'])->name('quotazione.index');
 Route::post('/preventivo', [QuotazioneController::class, 'calcola'])->name('quotazione.calcola');
 Route::get('/preventivo/massa-grezzo', [QuotazioneController::class, 'massaGrezzo'])->name('quotazione.massa-grezzo');
+Route::post('/preventivo/analizza-modello', [ModelloCadController::class, 'analizza'])->name('quotazione.analizza-modello');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
